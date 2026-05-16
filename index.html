@@ -34,57 +34,58 @@ body::before{
 /* ── App Shell ── */
 .app-shell{
   position:fixed;inset:0;display:flex;flex-direction:column;
-  align-items:center;justify-content:flex-start;
+  align-items:center;justify-content:center;
   overflow:hidden;z-index:1;
 }
 
-/* ── Top Bar ── */
-.top-bar{
-  width:100%;display:flex;align-items:center;justify-content:center;
-  padding:20px 0 16px;gap:0;flex-shrink:0;
-  position:relative;z-index:100;
-}
-.top-logo{
-  position:absolute;left:32px;
-  font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
-  color:rgba(255,255,255,0.25);font-family:var(--font-mono);
-}
-.tab-pills{
-  display:flex;gap:6px;
-  background:rgba(255,255,255,0.04);
-  border:1px solid rgba(255,255,255,0.07);
-  border-radius:99px;padding:4px;
-}
-.tab-pill{
-  padding:7px 18px;border-radius:99px;
-  font-size:12px;font-weight:600;
-  color:rgba(255,255,255,0.35);
-  cursor:pointer;transition:all .25s ease;
-  white-space:nowrap;user-select:none;
-  letter-spacing:0.3px;
-}
-.tab-pill:hover{color:rgba(255,255,255,0.7);}
-.tab-pill.active{
-  background:linear-gradient(135deg,var(--primary),#5a4fcf);
-  color:#fff;
-  box-shadow:0 2px 12px rgba(108,92,231,0.4);
-}
+/* ── Top Bar (hidden — navigation is inside phone) ── */
+.top-bar{ display:none; }
+.tab-pills{ display:none; }
 
 /* ── Screens Container ── */
 .screens-viewport{
-  flex:1;width:100%;overflow:hidden;
-  display:flex;align-items:flex-start;justify-content:center;
-  padding-bottom:16px;
+  position:relative;
+  width:393px;
+  height:852px;
+  flex-shrink:0;
 }
 .screens-track{
-  display:flex;gap:0;
-  transition:transform 0.45s cubic-bezier(0.4,0,0.2,1);
-  will-change:transform;
-  align-items:flex-start;
+  position:absolute;inset:0;
 }
+/* Each slot stacks on top of each other */
 .screen-slot{
-  width:393px;flex-shrink:0;
-  display:flex;flex-direction:column;align-items:center;
+  position:absolute;inset:0;
+  width:393px;height:852px;
+  opacity:0;
+  pointer-events:none;
+  transform:translateX(100%);
+  transition:transform 0.4s cubic-bezier(0.4,0,0.2,1),
+             opacity 0.4s ease;
+}
+.screen-slot.active{
+  opacity:1;
+  pointer-events:auto;
+  transform:translateX(0);
+}
+.screen-slot.exit{
+  opacity:0;
+  pointer-events:none;
+  transform:translateX(-30%);
+}
+
+/* Scale phone to fit viewport */
+@media (max-height:900px){
+  .screens-viewport{transform:scale(0.93);transform-origin:center center;}
+}
+@media (max-height:800px){
+  .screens-viewport{transform:scale(0.83);transform-origin:center center;}
+}
+@media (max-height:720px){
+  .screens-viewport{transform:scale(0.75);transform-origin:center center;}
+}
+@media (max-width:420px){
+  .screens-viewport{transform:scale(0.88);transform-origin:top center;}
+  .app-shell{justify-content:flex-start;padding-top:8px;}
 }
 
 /* ── Phone Frame (shared) ── */
@@ -3549,30 +3550,37 @@ body::before{
 <!-- Navigation Controller -->
 <script>
 let currentScreen = 0;
-const track = document.getElementById('track');
-const pills = document.querySelectorAll('.tab-pill');
+const slots = document.querySelectorAll('.screen-slot');
 
 function showScreen(idx) {
+  if(idx === currentScreen) return;
+  const prev = currentScreen;
   currentScreen = idx;
-  const vw = document.getElementById('viewport').clientWidth;
-  const slotW = 393;
-  // Center the active screen
-  const totalW = slotW * 4;
-  const offset = idx * slotW - (vw - slotW) / 2;
-  track.style.transform = `translateX(${-Math.max(0, offset)}px)`;
-  pills.forEach((p,i) => p.classList.toggle('active', i === idx));
-  // Also update inner tab bars
-  document.querySelectorAll('.tab-item').forEach((t,i) => {
-    const screenIdx = Math.floor(i / 4);
-    const tabIdx = i % 4;
-    // Each phone has 4 tab items; active = matches current screen shown in that phone
+
+  // exit current
+  slots[prev].classList.remove('active');
+  slots[prev].classList.add('exit');
+  setTimeout(() => slots[prev].classList.remove('exit'), 420);
+
+  // enter next (from right if going forward, from left if going back)
+  const dir = idx > prev ? 1 : -1;
+  slots[idx].style.transform = `translateX(${dir * 100}%)`;
+  slots[idx].style.transition = 'none';
+  slots[idx].style.opacity = '0';
+  slots[idx].classList.add('active');
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      slots[idx].style.transition = '';
+      slots[idx].style.transform = 'translateX(0)';
+      slots[idx].style.opacity = '1';
+    });
   });
-  // Update all tab bars to show correct active state
+
+  // sync all tab bars
   updateAllTabBars(idx);
 }
 
 function updateAllTabBars(activeIdx) {
-  // Each phone frame has its own tab bar with 4 items
   const allPhones = document.querySelectorAll('.phone-frame');
   allPhones.forEach(phone => {
     const tabs = phone.querySelectorAll('.tab-item');
@@ -3580,12 +3588,16 @@ function updateAllTabBars(activeIdx) {
   });
 }
 
-// Init centering
-function initPositions() {
-  showScreen(0);
-}
-window.addEventListener('load', initPositions);
-window.addEventListener('resize', () => showScreen(currentScreen));
+// Init: show only screen 0
+window.addEventListener('load', () => {
+  slots.forEach((s, i) => {
+    s.classList.remove('active','exit');
+    s.style.transform = '';
+    s.style.opacity = '';
+    if(i === 0) s.classList.add('active');
+  });
+  updateAllTabBars(0);
+});
 </script>
 
 <!-- Screen 1 Script -->
